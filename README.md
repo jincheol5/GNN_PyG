@@ -1,2 +1,1 @@
-# link_prediction
-Link prediction using GNN
+GNN using PyG
