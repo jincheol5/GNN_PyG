@@ -6,7 +6,8 @@ from torch_geometric.nn import global_mean_pool,global_add_pool,global_max_pool
 class Graph_Classifier(nn.Module):
     def __init__(self,
             input_dim:int=32,
-            latent_dim:int=32
+            latent_dim:int=32,
+            output_dim:int=1
         ):
         super().__init__()
         self.decoder=nn.Sequential(
@@ -17,7 +18,7 @@ class Graph_Classifier(nn.Module):
             nn.ReLU(),
             nn.Linear(
                 in_features=latent_dim,
-                out_features=1
+                out_features=output_dim
             )
         )
 
@@ -44,4 +45,4 @@ class Graph_Classifier(nn.Module):
                 graph_embed=global_max_pool(x=x,batch=batch)
             case "add":
                 graph_embed=global_add_pool(x=x,batch=batch)
-        return self.decoder(graph_embed) # [num_graph,1]
+        return self.decoder(graph_embed) # [num_graph,num_class]
