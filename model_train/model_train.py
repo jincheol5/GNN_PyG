@@ -32,7 +32,6 @@ class ModelTrainer:
             )
 
         model=model.to(device)
-
         """
         model train
         """

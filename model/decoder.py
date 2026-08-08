@@ -46,3 +46,42 @@ class Graph_Classifier(nn.Module):
             case "add":
                 graph_embed=global_add_pool(x=x,batch=batch)
         return self.decoder(graph_embed) # [num_graph,num_class]
+
+class Link_Predictor(nn.Module):
+    def __init__(self,
+            node_dim:int=32,
+            latent_dim:int=32
+        ):
+        super().__init__()
+        self.decoder=nn.Sequential(
+            nn.Linear(
+                in_features=node_dim+node_dim,
+                out_features=latent_dim
+            ),
+            nn.ReLU(),
+            nn.Linear(
+                in_features=latent_dim,
+                out_features=1
+            )
+        )
+
+    def forward(self,
+            x:torch.Tensor,
+            edge_index:torch.Tensor
+        ):
+        """
+        Input:
+            x: [N,node_dim]
+            edge_index: [2,E]
+                edge_index = pos_edge_index + neg_edge_index
+        Output:
+            logit: [E,1]
+        """
+        src,dst=edge_index
+        src_x=x[src] # [E,node_dim]
+        dst_x=x[dst] # [E,node_dim]
+        edge_x=torch.cat(
+            [src_x,dst_x],
+            dim=-1
+        )  # [E,2*node_dim]
+        return self.decoder(edge_x) # [E, 1]
