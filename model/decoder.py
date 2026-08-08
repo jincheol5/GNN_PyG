@@ -7,7 +7,7 @@ class Graph_Classifier(nn.Module):
     def __init__(self,
             input_dim:int=32,
             latent_dim:int=32,
-            output_dim:int=1
+            n_class:int=1
         ):
         super().__init__()
         self.decoder=nn.Sequential(
@@ -18,7 +18,7 @@ class Graph_Classifier(nn.Module):
             nn.ReLU(),
             nn.Linear(
                 in_features=latent_dim,
-                out_features=output_dim
+                out_features=n_class
             )
         )
 
@@ -84,4 +84,4 @@ class Link_Predictor(nn.Module):
             [src_x,dst_x],
             dim=-1
         )  # [E,2*node_dim]
-        return self.decoder(edge_x) # [E, 1]
+        return self.decoder(edge_x) # [E,1]

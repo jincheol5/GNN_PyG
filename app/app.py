@@ -4,7 +4,7 @@ from torch_geometric.datasets import TUDataset,Planetoid
 from torch_geometric.transforms import RandomLinkSplit
 from torch_geometric.loader import DataLoader
 from torch_geometric.loader import LinkNeighborLoader
-from model import GCN_Graph_Classifier
+from model import GCN_Graph_Classifier,GCN_Link_Predictor
 from model_train import ModelTrainer
 
 def app(**kwargs):
@@ -27,14 +27,15 @@ def app(**kwargs):
 
             node_dim=dataset.num_node_features
             latent_dim=32
-            output_dim=dataset.num_classes
+            n_class=dataset.num_classes
 
             ### set model
             model=GCN_Graph_Classifier(
                 node_dim=node_dim,
                 latent_dim=latent_dim,
-                output_dim=output_dim,
-                n_layer=kwargs["n_layer"]
+                n_class=n_class,
+                n_layer=kwargs["n_layer"],
+                is_graph_norm=True
             )
 
             ### train model
@@ -61,6 +62,8 @@ def app(**kwargs):
             dataset_path=os.path.join("..","data","pyg",kwargs["dataset_name"])
             dataset=Planetoid(root=dataset_path,name=kwargs["dataset_name"])
             data=dataset[0]
+            node_dim=data.num_node_features
+            latent_dim=32
 
             transform=RandomLinkSplit(
                 num_val=0.1,
@@ -70,17 +73,59 @@ def app(**kwargs):
             ) 
             train_data,val_data,test_data=transform(data) # edge_label_index=[2,pos_E,neg_E], edge_label=[pos_E+neg_E,]
 
+            # train_loader: batch마다 동적으로 negative sampling
             train_loader=LinkNeighborLoader(
                 data=train_data,
                 num_neighbors=[15,10], # 필수, 1-hop에서 노드당 최대 15개 이웃, 2-hop에서 노드당 최대 10개 이웃
-                batch_size=1024,
+                batch_size=kwargs["batch_size"],
                 edge_label_index=train_data.edge_label_index,
                 edge_label=train_data.edge_label,
+                neg_sampling=dict(
+                    mode="binary",
+                    amount=1.0
+                ), # 
                 shuffle=True
             )
-            
+            # val_loader: RandomLinkSplit에서 생성한 고정 negative sample 사용
+            val_loader=LinkNeighborLoader(
+                data=val_data,
+                num_neighbors=[15,10], 
+                batch_size=kwargs["batch_size"],
+                edge_label_index=val_data.edge_label_index,
+                edge_label=val_data.edge_label,
+                shuffle=True
+            )
+            # test_loader: RandomLinkSplit에서 생성한 고정 negative sample 사용
+            test_loader=LinkNeighborLoader(
+                data=test_data,
+                num_neighbors=[15,10], 
+                batch_size=kwargs["batch_size"],
+                edge_label_index=test_data.edge_label_index,
+                edge_label=test_data.edge_label,
+                shuffle=True
+            )
 
+            ### set model
+            model=GCN_Link_Predictor(
+                node_dim=node_dim,
+                latent_dim=latent_dim,
+                n_layer=kwargs["n_layer"]
+            )
 
+            ### train model
+            model=ModelTrainer.train_link_prediction(
+                model=model,
+                train_loader=train_loader,
+                val_loader=val_loader,
+                **kwargs
+            )
+
+            ### evaluate model
+            ModelTrainer.evaluate_link_prediction(
+                model=model,
+                data_loader=test_loader,
+                **kwargs
+            )
 
 if __name__=="__main__":
     """
@@ -88,7 +133,7 @@ if __name__=="__main__":
     """
     parser=argparse.ArgumentParser()
     parser.add_argument("--app_num",type=int,default=1)
-    parser.add_argument("--dataset_name",type=str,default=f"ENZYMES")
+    parser.add_argument("--dataset_name",type=str,default=f"ENZYMES") # Link Prediction: Cora, CiteSeer, PubMed
     parser.add_argument("--optimizer",type=str,default=f"adam")
     parser.add_argument("--lr",type=float,default=0.0005)
     parser.add_argument("--seed",type=int,default=1)
