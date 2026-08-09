@@ -1,10 +1,15 @@
 import os
 import argparse
+import torch
+from torch.utils.data import random_split
 from torch_geometric.datasets import TUDataset,Planetoid
 from torch_geometric.transforms import RandomLinkSplit
 from torch_geometric.loader import DataLoader
 from torch_geometric.loader import LinkNeighborLoader
-from model import GCN_Graph_Classifier,GCN_Link_Predictor
+from model import (
+    GCN_Graph_Classifier,GCN_Link_Predictor,
+    GAT_Graph_Classifier,GAT_Link_Predictor
+)
 from model_train import ModelTrainer
 
 def app(**kwargs):
@@ -16,27 +21,42 @@ def app(**kwargs):
             ### set dataset
             dataset_path=os.path.join("..","data","pyg",kwargs["dataset_name"])
             dataset=TUDataset(root=dataset_path,name=kwargs["dataset_name"])
-            dataset=dataset.shuffle()
-            train_dataset=dataset[:500]
-            val_dataset=dataset[500:540]
-            test_dataset=dataset[540:]
+
+            # 8 : 1 : 1
+            generator=torch.Generator().manual_seed(kwargs["seed"])
+            train_dataset,val_dataset,test_dataset=random_split(
+                dataset,
+                [0.8,0.1,0.1],
+                generator=generator
+            )
 
             train_loader=DataLoader(train_dataset,batch_size=32,shuffle=True)
-            val_loader=DataLoader(val_dataset,batch_size=32,shuffle=True)
-            test_loader=DataLoader(test_dataset,batch_size=32,shuffle=True)
+            val_loader=DataLoader(val_dataset,batch_size=32,shuffle=False)
+            test_loader=DataLoader(test_dataset,batch_size=32,shuffle=False)
 
             node_dim=dataset.num_node_features
             latent_dim=32
             n_class=dataset.num_classes
 
             ### set model
-            model=GCN_Graph_Classifier(
-                node_dim=node_dim,
-                latent_dim=latent_dim,
-                n_class=n_class,
-                n_layer=kwargs["n_layer"],
-                is_graph_norm=True
-            )
+            match kwargs["model_name"]:
+                case "gcn":
+                    model=GCN_Graph_Classifier(
+                        node_dim=node_dim,
+                        latent_dim=latent_dim,
+                        n_class=n_class,
+                        n_layer=kwargs["n_layer"],
+                        is_graph_norm=True
+                    )
+                case "gat":
+                    model=GAT_Graph_Classifier(
+                        node_dim=node_dim,
+                        latent_dim=latent_dim,
+                        n_class=n_class,
+                        n_layer=kwargs["n_layer"],
+                        n_head=kwargs["n_head"],
+                        is_graph_norm=True
+                    )
 
             ### train model
             model=ModelTrainer.train_graph_classification(
@@ -106,11 +126,20 @@ def app(**kwargs):
             )
 
             ### set model
-            model=GCN_Link_Predictor(
-                node_dim=node_dim,
-                latent_dim=latent_dim,
-                n_layer=kwargs["n_layer"]
-            )
+            match kwargs["model_name"]:
+                case "gcn":
+                    model=GCN_Link_Predictor(
+                        node_dim=node_dim,
+                        latent_dim=latent_dim,
+                        n_layer=kwargs["n_layer"]
+                    )
+                case "gat":
+                    model=GAT_Link_Predictor(
+                        node_dim=node_dim,
+                        latent_dim=latent_dim,
+                        n_layer=kwargs["n_layer"],
+                        n_head=kwargs["n_head"]
+                    )
 
             ### train model
             model=ModelTrainer.train_link_prediction(
@@ -134,6 +163,7 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument("--app_num",type=int,default=1)
     parser.add_argument("--dataset_name",type=str,default=f"ENZYMES") # Link Prediction: Cora, CiteSeer, PubMed
+    parser.add_argument("--model_name",type=str,default=f"gat") # gcn, gat
     parser.add_argument("--optimizer",type=str,default=f"adam")
     parser.add_argument("--lr",type=float,default=0.0005)
     parser.add_argument("--seed",type=int,default=1)
@@ -141,16 +171,19 @@ if __name__=="__main__":
     parser.add_argument("--batch_size",type=int,default=100)
     parser.add_argument("--global_pool",type=str,default=f"mean")
     parser.add_argument("--n_layer",type=int,default=2)
+    parser.add_argument("--n_head",type=int,default=3)
     args=parser.parse_args()
     app_config={
         "app_num":args.app_num,
         "dataset_name":args.dataset_name,
+        "model_name":args.model_name,
         "optimizer":args.optimizer,
         "lr":args.lr,
         "seed":args.seed,
         "epoch":args.epoch,
         "batch_size":args.batch_size,
         "global_pool":args.global_pool,
-        "n_layer":args.n_layer
+        "n_layer":args.n_layer,
+        "n_head":args.n_head
     }
     app(**app_config)
